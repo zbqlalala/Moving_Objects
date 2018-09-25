@@ -920,48 +920,77 @@ bool Tracking::TrackWithMotionModel()
     
     int TestNumOutliers = 0;
     int LastPId=-1;
+    int NextPID=-1;
+    //从第一个有效点开始　连接到最后
+    //这一段回头要被开心的代码代替
+    vector<int> viNextID(mCurrentFrame.N,-1);
+    vector<int> viLastID(mCurrentFrame.N,-1);
     for(int i =0; i<mCurrentFrame.N; i++)
     {
-        if(mCurrentFrame.mvpMapPoints[i])
+        if(mCurrentFrame.mvpMapPoints[i]&& mCurrentFrame.mvDepth[i]>0)
         {
 	  if(LastPId==-1)
 	  {
 	    LastPId=i;
 	    continue;
-	  }
-	 
-	 // the distance of this frame 
-	 // To get the real distance,we project the frame to get the real
-	  float ZposCur1 = mCurrentFrame.mvDepth[i];
-	  float ZposCur2 = mCurrentFrame.mvDepth[LastPId];
-	   
-	  if(ZposCur1>0&&ZposCur2>0)
-	  {
-	      cv::Mat posCur1 = mCurrentFrame.UnprojectStereo(i);
-	      cv::Mat posCur2 = mCurrentFrame.UnprojectStereo(LastPId);
-	      float distcurF= sqrt( pow((posCur1.at<float>(0)- posCur2.at<float>(0)),2) +pow((posCur1.at<float>(1)- posCur2.at<float>(1)),2) + pow((posCur1.at<float>(2)- posCur2.at<float>(2)),2) );
-		      
-		    
-	      // mCurrentFrame.mviMapLastFrameID[i]指向i这个点所在的上一帧的ID数
-	      // the distance of last frame 	 
-	      cv::Mat posLast1 = mLastFrame.mvpMapPoints[mCurrentFrame.mviMapLastFrameID[i]]->GetWorldPos();
-	      cv::Mat posLast2 = mLastFrame.mvpMapPoints[mCurrentFrame.mviMapLastFrameID[LastPId]]->GetWorldPos();
-	      float distLastF= sqrt( pow((posLast1.at<float>(0)- posLast2.at<float>(0)),2) +pow((posLast1.at<float>(1)- posLast2.at<float>(1)),2) + pow((posLast1.at<float>(2)- posLast2.at<float>(2)),2) );
-	      cout<<"the frame of "<<mCurrentFrame.mnId<<" and the point is "<<i<<"   the Last dist is  "<<distLastF<<"and the current dist is "<<distcurF<<" the distance is"<<abs(distcurF-distLastF)<<endl;
-		
-	      if( (abs(distcurF-distLastF)) >0.1f)
+	  }		    
+	    viNextID[LastPId]=i;
+	    viLastID[i]=LastPId;
+	    LastPId=i;	    
+	}
+    }
+    for(int i =0; i<mCurrentFrame.N; i++)
+    {
+        if(mCurrentFrame.mvpMapPoints[i]&& mCurrentFrame.mvDepth[i]>0)
+        {
+	   NextPID=viNextID[i];
+	   LastPId=viLastID[i];
+	   if(NextPID!=-1)
+	   {
+	      // the distance of this frame 
+	      // To get the real distance,we project the frame to get the real
+		cv::Mat posCur1 = mCurrentFrame.UnprojectStereo(i);
+		cv::Mat posCur2 = mCurrentFrame.UnprojectStereo(NextPID);
+		float distcurF= sqrt( pow((posCur1.at<float>(0)- posCur2.at<float>(0)),2) +pow((posCur1.at<float>(1)- posCur2.at<float>(1)),2) + pow((posCur1.at<float>(2)- posCur2.at<float>(2)),2) );
+			  
+		// mCurrentFrame.mviMapLastFrameID[i]指向i这个点所在的上一帧的ID数
+		// the distance of last frame 	 
+		cv::Mat posLast1 = mLastFrame.mvpMapPoints[mCurrentFrame.mviMapLastFrameID[i]]->GetWorldPos();
+		cv::Mat posLast2 = mLastFrame.mvpMapPoints[mCurrentFrame.mviMapLastFrameID[NextPID]]->GetWorldPos();
+		float distLastF= sqrt( pow((posLast1.at<float>(0)- posLast2.at<float>(0)),2) +pow((posLast1.at<float>(1)- posLast2.at<float>(1)),2) + pow((posLast1.at<float>(2)- posLast2.at<float>(2)),2) );
+		cout<<"the frame of "<<mCurrentFrame.mnId<<" and the point is "<<i<<"   the Last dist is  "<<distLastF<<"and the current dist is "<<distcurF<<" the distance is"<<abs(distcurF-distLastF)<<endl;
+		  
+	      if( (abs(distcurF-distLastF)) >0.01f)
 	      {
 		//two inliers, keep the deeper one and get rid of the 
-		if( (!mCurrentFrame.mvbOutlierForTest[i])&&(!mCurrentFrame.mvbOutlierForTest[LastPId]) )
+		if( (!mCurrentFrame.mvbOutlierForTest[i])&&(!mCurrentFrame.mvbOutlierForTest[NextPID]) )
 		{
 		  //how to judge the deeper depth? and not to deep as mThDepth we have the absolute z now
-		  if(mCurrentFrame.mvDepth[i]>mCurrentFrame.mvDepth[LastPId] && mCurrentFrame.mvDepth[i]<mThDepth)
+		  if(mCurrentFrame.mvDepth[i]>mCurrentFrame.mvDepth[NextPID] && mCurrentFrame.mvDepth[i]<mThDepth)
 		  {
-		      mCurrentFrame.mvbOutlierForTest[LastPId]=true;
+		      mCurrentFrame.mvbOutlierForTest[NextPID]=true;
+		      //这里接下来会自己看着办的　我就不用管了
 		  }
-		  else if(mCurrentFrame.mvDepth[i]<mCurrentFrame.mvDepth[LastPId] && mCurrentFrame.mvDepth[LastPId]<mThDepth)
+		  else if(mCurrentFrame.mvDepth[i]<mCurrentFrame.mvDepth[NextPID] && mCurrentFrame.mvDepth[NextPID]<mThDepth)
 		  {
-		    mCurrentFrame.mvbOutlierForTest[i]=true;
+		      mCurrentFrame.mvbOutlierForTest[i]=true;
+		      //这里判断了很多情况　上一个是内点　那肯定是因为跟当前点小于阈值，那么上一个点应该是外点；上一个点是外点，那说明本身跟我大于阈值而且他是比较浅的那个　那我就可以不用管了　可以停止了
+		     if(LastPId>=0)
+		     {
+		      bool temp=mCurrentFrame.mvbOutlierForTest[LastPId];
+		      //只有当temp是true的时候　!temp是false的时候　循环才能停止．
+		      while(!temp)
+		      {	
+			 mCurrentFrame.mvbOutlierForTest[LastPId]=true;
+			 LastPId=viLastID[LastPId];
+			 if(LastPId<0)
+			 {
+			    break;
+			 }
+			 temp=mCurrentFrame.mvbOutlierForTest[LastPId];
+			 
+		      }
+		     }
 		  }
 		    
 		  TestNumOutliers++;
@@ -970,25 +999,26 @@ bool Tracking::TrackWithMotionModel()
 	      else
 	      {
 		//if we have outliers, two points are both outliers
-		if( mCurrentFrame.mvbOutlierForTest[i]|| mCurrentFrame.mvbOutlierForTest[LastPId] )
+		if( mCurrentFrame.mvbOutlierForTest[i]|| mCurrentFrame.mvbOutlierForTest[NextPID] )
 		{
 		  mCurrentFrame.mvbOutlierForTest[i]=true;
-		  mCurrentFrame.mvbOutlierForTest[LastPId]=true;
+		  mCurrentFrame.mvbOutlierForTest[NextPID]=true;
 		  TestNumOutliers++;//wrong but I do not want to re
 		} 
-	      }	  
-	      LastPId=i;
-	  }
-	  /*else
-	  {
-	    if(ZposCur1<=0)
-	      mCurrentFrame.mvbOutlierForTest[i]=true;
-	    if(ZposCur2<=0)
-	      mCurrentFrame.mvbOutlierForTest[LastPId]=true;
-	  }*/
-       }
-    }    
-     
+	      }	 
+	   }
+       }      
+       //位置为０的点设为outlier.
+        float ZposCur1 = mCurrentFrame.mvDepth[i];   
+        if(ZposCur1<=0)
+	      mCurrentFrame.mvbOutlierForTest[i]=true;      
+    } 
+    
+	  
+	  
+	  
+	  
+	  
     
     // Optimize frame pose with all matches
     Optimizer::PoseOptimization(&mCurrentFrame);
