@@ -51,6 +51,7 @@ public:
 protected:
 
     void DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText);
+    vector<vector<int> > Delaunay(vector<CvPoint2D32f> points,vector<float> pIDMapx,vector<float> pIDMapy);//just for test
 
     // Info of the frame to be drawn
     cv::Mat mIm;
@@ -59,6 +60,8 @@ protected:
     vector<bool> mvbMap, mvbVO;
     //for test
     vector<bool> mvbMoving;
+    vector<bool> mvbOutlier;
+    
     bool mbOnlyTracking;
     int mnTracked, mnTrackedVO;
     int mnMoving;//just for test
